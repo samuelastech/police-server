@@ -8,7 +8,6 @@ import { UpdateTokenDto } from './dtos/update-token.dto';
 import { UserType } from './user-type.enum';
 import { randomBytes } from 'crypto';
 import { scrypt } from '../utils/scrypt.security';
-import { UserDto } from './dtos/user.dto';
 
 @Injectable()
 export class UsersService {
