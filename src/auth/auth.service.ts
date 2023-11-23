@@ -69,6 +69,8 @@ export class AuthService {
       module: user.module ? user.module : false,
       type: user.type,
       id: user._id,
+      email: user.email,
+      name: user.name,
     };
   }
 

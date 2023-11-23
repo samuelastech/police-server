@@ -3,6 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, now } from 'mongoose';
 import { WorkCategory, WorkStatus } from './work-types.enum';
 import { Work } from './schemas/work.schema';
+import { CallForService } from './schemas/call-for-service.schema';
 import { UsersService } from '../users/users.service';
 import { SquadService } from '../squad/squad.service';
 
@@ -10,6 +11,7 @@ import { SquadService } from '../squad/squad.service';
 export class WorkService {
   constructor(
     @InjectModel(Work.name) private workModel: Model<Work>,
+    @InjectModel(CallForService.name) private cfs: Model<CallForService>,
     private usersService: UsersService,
     private squadService: SquadService,
   ) {}
@@ -24,6 +26,18 @@ export class WorkService {
     return id;
   }
 
+  async startSolo(clientId: string) {
+    const { id } = await this.workModel.create({
+      squad: null,
+      workType: WorkCategory.PATROLLING,
+    });
+
+    const resource = (await this.usersService.listOne(clientId)) as any;
+    resource.work.push(id);
+    await resource.save();
+    return id;
+  }
+
   async finishWork(workId: string) {
     const work = await this.workModel.findById(workId);
     work.workStatus = WorkStatus.FINISHED;
@@ -33,6 +47,33 @@ export class WorkService {
 
   findOne(id: string) {
     return this.workModel.findById(id);
+  }
+
+  async persistCFS(
+    requesterId: string,
+    squadId: string,
+    offlinePolices: string[],
+  ) {
+    const existRequest = await this.cfs.findOne({
+      requester: requesterId,
+      squadId,
+    });
+
+    if (!existRequest) {
+      return this.cfs.create({
+        requesterId,
+        squadId,
+        offlinePolices,
+      });
+    }
+  }
+
+  lookForCFS(squadId: string) {
+    return this.cfs.findOne({ squadId });
+  }
+
+  finishCFS(squadId: string) {
+    return this.cfs.deleteOne({ squadId });
   }
 
   isWorking(clientId: string, workType: string) {

@@ -1,4 +1,4 @@
-import { BadRequestException, Logger } from '@nestjs/common';
+import { Logger } from '@nestjs/common';
 import {
   OnGatewayConnection,
   OnGatewayDisconnect,
@@ -80,9 +80,19 @@ export class BaseGateway
 
       client.data.squadId = String(squad);
       client.data.squadMembers = squadMembers;
-      client.data.sendSquadPosition = true;
       client.join(Rooms.Squad + ':' + squad);
       this.handleBindSquad(client);
+      this.lookForCFS(squad, userId, client.id);
+    } else {
+      client.join(Rooms.Patrolling + ':' + 'alone');
+      client.data.squadId = null;
+      this.logger.log(
+        `Client connected:
+        - socketId: ${client.id}
+        - userId: ${client.data.userId}
+        - workType: ${client.data.workType}
+        - squadId: ${client.data.squadId}`,
+      );
     }
   }
 
@@ -107,6 +117,20 @@ export class BaseGateway
     );
   }
 
+  async lookForCFS(squadId: string, userId: string, socketId: string) {
+    const cfs = await this.workService.lookForCFS(squadId);
+    if (cfs && cfs.offlinePolices.includes(userId)) {
+      this.server.to(socketId).emit('squad:startWork');
+      cfs.offlinePolices = cfs.offlinePolices.filter((id) => {
+        return id !== userId;
+      });
+      if (!cfs.offlinePolices.length) {
+        await this.workService.finishCFS(squadId);
+      } else {
+        await cfs.save();
+      }
+    }
+  }
   handleDisconnect(client: Socket) {
     const { squadId } = client.data;
     client.to(Rooms.Operations).emit('police:finishedWork', {

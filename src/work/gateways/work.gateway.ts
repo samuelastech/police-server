@@ -28,24 +28,29 @@ export class WorkGateway {
 
     if (workType === Rooms.Patrolling) {
       if (!squadId) {
-        throw new BadRequestException(
-          'You cannot start to patrol if you do not have a squad',
-        );
-      }
-
-      const memberStillOnline = await client
-        .in(Rooms.Squad + ':' + squadId)
-        .fetchSockets();
-
-      if (!memberStillOnline.length) {
-        this.server.to(Rooms.Squad + ':' + squadId).emit('squad:readyForWork');
-        const workId = await this.workService.startWork(squadId, workType);
+        this.server.to(client.id).emit('startAlone');
+        const workId = await this.workService.startSolo(userId);
         client.data.workId = String(workId);
         return;
       }
 
+      this.server.to(client.id).emit('waitForSquad');
+      // Send notification to those who are online
       client.to(Rooms.Squad + ':' + squadId).emit('squad:startWork');
       this.squadWaitQueue.set(squadId, Object.keys(squadMembers).length);
+
+      // Persist the request to those offline
+      const offlinePolices = [];
+      for (const member in squadMembers) {
+        if (!squadMembers[member]) {
+          offlinePolices.push(member);
+        }
+      }
+
+      if (offlinePolices.length) {
+        await this.workService.persistCFS(userId, squadId, offlinePolices);
+      }
+
       this.logger.log(
         `Squad member ${client.id} is requesting to start to work`,
       );
@@ -82,35 +87,37 @@ export class WorkGateway {
 
     if (!workId) {
       this.logger.error('There is no work to finish my champion');
+
       this.server
         .to(Rooms.Squad + ':' + squadId)
         .emit('squad:readyForFinishWork');
+      return;
     }
 
     if (workType === Rooms.Patrolling) {
       if (!squadId) {
-        throw new BadRequestException(
-          'You cannot finisha a patrol if you do not have a squad',
+        this.server.to(client.id).emit('squad:readyForFinishWork');
+        client.to(Rooms.Operations).emit('police:finishedWork', client.id);
+        await this.workService.finishWork(workId);
+      } else {
+        const memberStillOnline = await client
+          .in(Rooms.Squad + ':' + squadId)
+          .fetchSockets();
+
+        if (!memberStillOnline.length) {
+          this.server
+            .to(Rooms.Squad + ':' + squadId)
+            .emit('squad:readyForFinishWork');
+          client.to(Rooms.Operations).emit('police:finishedWork', client.id);
+          await this.workService.finishWork(workId);
+          return;
+        }
+        client.to(Rooms.Squad + ':' + squadId).emit('squad:finishWork');
+        this.squadWaitQueue.set(squadId, Object.keys(squadMembers).length);
+        this.logger.log(
+          `Squad member ${client.id} is requesting to finish working`,
         );
       }
-      const memberStillOnline = await client
-        .in(Rooms.Squad + ':' + squadId)
-        .fetchSockets();
-
-      if (!memberStillOnline.length) {
-        this.server
-          .to(Rooms.Squad + ':' + squadId)
-          .emit('squad:readyForFinishWork');
-        client.to(Rooms.Operations).emit('police:finishedWork', squadId);
-        await this.workService.finishWork(workId);
-        return;
-      }
-
-      client.to(Rooms.Squad + ':' + squadId).emit('squad:finishWork');
-      this.squadWaitQueue.set(squadId, Object.keys(squadMembers).length);
-      this.logger.log(
-        `Squad member ${client.id} is requesting to finish working`,
-      );
     } else {
       this.workService.finishWork(workId);
     }
@@ -133,23 +140,19 @@ export class WorkGateway {
           null;
       }
       this.logger.log(`Squad ${squadId} finished their work`);
-      this.cleanUpSquad(client);
+      await this.cleanUpSquad(squadId);
     } else {
       this.squadWaitQueue.set(squadId, left);
     }
   }
 
-  private cleanUpSquad(client: Socket) {
-    const { sendSquadPosition, squadId, squadMembers } = client.data;
-    if (sendSquadPosition) {
-      client.to(Rooms.Operations).emit('police:finishedWork', squadId);
-    } else {
-      for (const police in squadMembers) {
-        const clientId = this.server.sockets.sockets.get(
-          squadMembers[police],
-        ).id;
-        client.to(Rooms.Operations).emit('police:finishedWork', clientId);
-      }
+  private async cleanUpSquad(squadId: string) {
+    const sockets = await this.server
+      .in(Rooms.Squad + ':' + squadId)
+      .fetchSockets();
+
+    for (const police of sockets) {
+      this.server.to(Rooms.Operations).emit('police:finishedWork', police.id);
     }
   }
 }

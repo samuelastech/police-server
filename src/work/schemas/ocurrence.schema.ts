@@ -25,7 +25,7 @@ export class Occurrence extends TimeFrame {
   @Prop({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Work',
-    required: true,
+    default: null,
   })
   squadWork: Work;
 

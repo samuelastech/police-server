@@ -16,6 +16,7 @@ import { PatrolGateway } from './gateways/patrol.gateway';
 import { BaseGateway } from './gateways/base.gateway';
 import { WorkGateway } from './gateways/work.gateway';
 import { SupportGateway } from './gateways/support.gateway';
+import { CallForServiceSchema } from './schemas/call-for-service.schema';
 
 @Module({
   imports: [
@@ -34,6 +35,10 @@ import { SupportGateway } from './gateways/support.gateway';
         discriminators: [
           { name: OccurrenceCategory.CHASE, schema: ChaseOcurrenceSchema },
         ],
+      },
+      {
+        name: 'CallForService',
+        schema: CallForServiceSchema,
       },
     ]),
     AuthModule,

@@ -7,7 +7,7 @@ export class PatrollingWork {
   @Prop({
     type: mongoose.Schema.Types.ObjectId,
     ref: Squad.name,
-    required: true,
+    default: null,
   })
   squad: Squad;
 

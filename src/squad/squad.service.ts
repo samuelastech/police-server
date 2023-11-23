@@ -105,7 +105,6 @@ export class SquadService {
   }
 
   async findOne(id: string) {
-    console.log(id);
     const squad = await this.squadModel.findById(id);
     if (!squad) throw new NotFoundException(`Squad ${id} not found`);
     return squad;

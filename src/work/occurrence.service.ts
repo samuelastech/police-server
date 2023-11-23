@@ -30,6 +30,19 @@ export class OccurrenceService {
     return occurrence;
   }
 
+  async startAlone(workId: string, clientId: string, occurrenceType: string) {
+    const occurrence = await this.occurrenceModel.create({
+      squadWork: workId,
+      occurrenceType,
+    });
+    await this.bindOccurrence(occurrence.id, workId);
+    const user = (await this.usersService.listOne(String(clientId))) as any;
+    user.occurrences.push(occurrence.id);
+    console.log(user);
+    await user.save();
+    return occurrence;
+  }
+
   finishOccurrence(occurrenceId: string) {
     return this.occurrenceModel.findByIdAndUpdate(
       occurrenceId,
@@ -57,6 +70,19 @@ export class OccurrenceService {
       occurrenceId,
       {
         $set: { operatorWork: workId },
+      },
+      { new: true },
+    );
+  }
+
+  async registerAloneSupport(occurrenceId: string, clientId: string) {
+    const user = (await this.usersService.listOne(String(clientId))) as any;
+    user.supported.push(occurrenceId);
+    await user.save();
+    return this.occurrenceModel.findByIdAndUpdate(
+      occurrenceId,
+      {
+        $addToSet: { squadsOnBackup: clientId },
       },
       { new: true },
     );
